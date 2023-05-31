@@ -157,7 +157,7 @@ public class Position {
     /**
      * Clears the accessible coordinates cache.
      */
-    private void clearCache() {
+    public void clearCache() {
         availableLegalMoves = null;
     }
 

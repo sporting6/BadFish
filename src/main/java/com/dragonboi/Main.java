@@ -3,45 +3,125 @@ package com.dragonboi;
 import ch.astorm.jchess.JChessGame;
 import ch.astorm.jchess.core.*;
 import ch.astorm.jchess.core.entities.*;
-import ch.astorm.jchess.core.rules.RuleManager;
 import ch.astorm.jchess.io.MoveParser;
 import ch.astorm.jchess.util.ASCIIPositionRenderer;
 
 import java.util.*;
+import java.util.concurrent.BlockingDeque;
 
 public class Main {
-    public static final int DEPTH = 3;
+    public static final int DEPTH = 4;
     public static final Random random = new Random();
 
+//        game.play("d4", "Nf6", "c4", "g6", "Nc3", "Bg7","e4", "d6", "Nf3", "O-O", "Be2", "e5");
 
     public static void main(String[] args) {
 
+        Scanner in = new Scanner(System.in);
+
+        System.out.println("What Should I do?");
+        System.out.println("1. Play Myself");
+        System.out.println("2. Play You");
+
+        int a = in.nextInt();
+
+        if(a == 1) {
+            playSelf();
+        } else if(a == 2){
+            System.out.println("What Color Do You Want To Play?");
+            System.out.println("1. Black");
+            System.out.println("2. White");
+            int b = in.nextInt();
+            if(b == 1){
+                playOther(Color.BLACK);
+            } else if(b == 2){
+                playOther(Color.WHITE);
+            }
+            else {
+                System.out.println("Invalid Setting, Try Again.");
+                return;
+            }
+        } else {
+            System.out.println("Invalid Setting, Try Again.");
+            return;
+        }
+    }
+    public static void playOther(Color color){
+        JChessGame game = JChessGame.newGame();
+
+        Scanner in = new Scanner(System.in);
+
+        ASCIIPositionRenderer.render(System.out, game.getPosition());
+
+        JChessGame.Status status = game.getStatus();
+
+        if(color == Color.WHITE){
+            while (status == JChessGame.Status.NOT_FINISHED) {
+
+                getMove(game);
+
+                ASCIIPositionRenderer.render(System.out, game.getPosition());
+
+                play(game, Color.BLACK);
+                System.gc();
+            }
+        }
+
+        if(color == Color.BLACK){
+            while (status == JChessGame.Status.NOT_FINISHED) {
+                play(game, Color.WHITE);
+
+                getMove(game);
+
+                ASCIIPositionRenderer.render(System.out, game.getPosition());
+
+                System.gc();
+            }
+        }
+        else return;
+    }
+
+
+
+
+    public static void playSelf(){
         JChessGame game = JChessGame.newGame();
 
 
-//        ASCIIPositionRenderer.render(System.out, game.getPosition());
+        ASCIIPositionRenderer.render(System.out, game.getPosition());
+
+        JChessGame.Status status = game.getStatus();
 
 
-        while (game.getStatus().isPlayAllowed()) {
+        while (status == JChessGame.Status.NOT_FINISHED) {
 
+            play(game, Color.WHITE);
 
-            Position pos = game.getPosition();
+            play(game, Color.BLACK);
 
-
-
-            game.play(bestMove(game.getPosition(), Color.WHITE));
 
             System.gc();
+        }
+    }
 
+    public static JChessGame.Status play(JChessGame game, Color color){
+        JChessGame.Status status;
+        Position pos = game.getPosition();
+        Move bestMove = bestMove(pos, color);
 
-            game.play(game.getPosition().getLegalMoves().get(0));
-
-
-
-            System.out.println(Position.getCount());
-            System.out.println(Position.getGcs());
+        try {
+            status = game.play(bestMove);
+        } catch (IllegalStateException e){
+            bestMove.setPromotion(new Queen(color));
+            status = game.play(bestMove);
+            System.out.println("Piece Promoted");
         }
 
+        ASCIIPositionRenderer.render(System.out, game.getPosition());
+
+        System.out.println(evalBoard(pos));
+        pos.clearCache();
+        return status;
     }
 
     public static void getMove(JChessGame game) {
@@ -57,7 +137,6 @@ public class Main {
         } catch (MoveParser.InvalidMoveException e) {
             System.out.println("Illegal Move, try again.");
             getMove(game);
-
         } catch (java.lang.StringIndexOutOfBoundsException e) {
             System.out.println("Illegal Move, try again.");
             getMove(game);
@@ -81,16 +160,29 @@ public class Main {
 
         if (curDepth < DEPTH) {
             for (int i = 0; i < moves.size(); i++) {
-                evals[i] = aveMaterial(pos.apply(moves.get(i)), curDepth + 1);
+                Position nextPos = pos.apply(moves.get(i));
+                evals[i] = aveMaterial(nextPos, curDepth + 1);
+                nextPos.clearCache();
             }
         }
         if (evals.length == 0) {
             return 0;
         }
+        moves = null;
+        double maxAdvantage = 0;
+        double minAdvantage = 0;
 
 
+        for (double i: evals) {
+            if (i > maxAdvantage) {
+                maxAdvantage = i;
+            }
+            if (i < minAdvantage) {
+                maxAdvantage = i;
+            }
+        }
 
-        return Arrays.stream(evals).sum() / evals.length;
+        return curDepth % 2 == 0 ? maxAdvantage : minAdvantage;
     }
 
     public static Move bestMove(Position pos, Color color) {
@@ -111,7 +203,7 @@ public class Main {
                 i++;
             }
         }
-        if (color == Color.BLACK) {
+        else {
             int i = 0;
             while (iter.hasNext()) {
                 evals[i] = aveMaterial(pos.apply(iter.next()), 1);
@@ -134,14 +226,6 @@ public class Main {
             return moves.get(random.nextInt(moves.size()));
         }
         Move finalMove = bestMoves.get(random.nextInt(bestMoves.size()));
-
-        if(finalMove.getDisplacement().getMoveable() instanceof Pawn){
-            if((color == Color.WHITE ? finalMove.getDisplacement().getOldLocation().getRow() == 6 : finalMove.getDisplacement().getOldLocation().getRow() == 1)){
-                finalMove.setPromotion(new Queen(color));
-
-            }
-        }
-
         System.gc();
 
         return finalMove;
@@ -192,7 +276,7 @@ public class Main {
                     toReturn = .3;
                 }
 
-                return color == Color.WHITE ? -toReturn : -toReturn;
+                return color == Color.WHITE ? toReturn : -toReturn;
             default:
                 return 0;
         }
@@ -222,7 +306,5 @@ public class Main {
         }
         return false;
     }
-
-
 
 }
